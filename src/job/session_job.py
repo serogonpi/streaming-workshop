@@ -6,14 +6,15 @@ def create_events_source_kafka(t_env):
     table_name = "events"
     source_ddl = f"""
         CREATE TABLE {table_name} (
-            lpep_pickup_datetime BIGINT,
-            lpep_dropoff_datetime BIGINT,
+            lpep_pickup_datetime VARCHAR,
+            lpep_dropoff_datetime VARCHAR,
             PULocationID INTEGER,
             DOLocationID INTEGER,
             passenger_count DOUBLE,
             trip_distance DOUBLE,
             tip_amount DOUBLE,
-            event_timestamp AS TO_TIMESTAMP_LTZ(lpep_dropoff_datetime, 3),
+            total_amount DOUBLE,
+            event_timestamp AS TO_TIMESTAMP(lpep_pickup_datetime, 'yyyy-MM-dd HH:mm:ss.SSS'),
             WATERMARK for event_timestamp as event_timestamp - INTERVAL '5' SECOND
         ) WITH (
             'connector' = 'kafka',

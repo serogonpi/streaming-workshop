@@ -4,20 +4,26 @@ from dataclasses import dataclass
 
 @dataclass
 class Ride:
+    lpep_pickup_datetime: str  # epoch milliseconds
+    lpep_dropoff_datetime: str
     PULocationID: int
     DOLocationID: int
+    passenger_count: float
     trip_distance: float
+    tip_amount: float
     total_amount: float
-    tpep_pickup_datetime: int  # epoch milliseconds
 
 
 def ride_from_row(row):
     return Ride(
+        lpep_pickup_datetime=row['lpep_pickup_datetime'].strftime('%Y-%m-%d %H:%M:%S.%f'),
+        lpep_dropoff_datetime=row['lpep_dropoff_datetime'].strftime('%Y-%m-%d %H:%M:%S.%f'),
         PULocationID=int(row['PULocationID']),
         DOLocationID=int(row['DOLocationID']),
+        passenger_count=float(row['passenger_count']),
         trip_distance=float(row['trip_distance']),
+        tip_amount=float(row['tip_amount']),
         total_amount=float(row['total_amount']),
-        tpep_pickup_datetime=int(row['tpep_pickup_datetime'].timestamp() * 1000),
     )
 
 

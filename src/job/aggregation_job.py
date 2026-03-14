@@ -6,22 +6,25 @@ def create_events_source_kafka(t_env):
     table_name = "events"
     source_ddl = f"""
         CREATE TABLE {table_name} (
+            lpep_pickup_datetime STRING,
+            lpep_dropoff_datetime STRING,
             PULocationID INTEGER,
             DOLocationID INTEGER,
+            passenger_count DOUBLE,
             trip_distance DOUBLE,
+            tip_amount DOUBLE,
             total_amount DOUBLE,
-            tpep_pickup_datetime BIGINT,
-            event_timestamp AS TO_TIMESTAMP_LTZ(tpep_pickup_datetime, 3),
+            event_timestamp AS TO_TIMESTAMP(lpep_pickup_datetime),
             WATERMARK for event_timestamp as event_timestamp - INTERVAL '5' SECOND
         ) WITH (
             'connector' = 'kafka',
             'properties.bootstrap.servers' = 'redpanda:29092',
-            'topic' = 'rides',
+            'topic' = 'green-trips',
             'scan.startup.mode' = 'earliest-offset',
             'properties.auto.offset.reset' = 'earliest',
             'format' = 'json'
         );
-        """
+    """
     t_env.execute_sql(source_ddl)
     return table_name
 
@@ -33,7 +36,6 @@ def create_events_aggregated_sink(t_env):
             window_start TIMESTAMP(3),
             PULocationID INT,
             num_trips BIGINT,
-            total_revenue DOUBLE,
             PRIMARY KEY (window_start, PULocationID) NOT ENFORCED
         ) WITH (
             'connector' = 'jdbc',
@@ -51,11 +53,16 @@ def create_events_aggregated_sink(t_env):
 def log_aggregation():
     env = StreamExecutionEnvironment.get_execution_environment()
     env.enable_checkpointing(10 * 1000)
-    env.set_parallelism(3)
+    env.set_parallelism(1)
 
     settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
     t_env = StreamTableEnvironment.create(env, environment_settings=settings)
-
+    
+    # Si una partición está inactiva por 10 seg, Flink la marca como "Idle"
+    # y permite que el Watermark avance con las demás.
+    t_env.get_config().set("table.exec.source.idle-timeout", "10 s")
+    # -----------------------
+    
     try:
         source_table = create_events_source_kafka(t_env)
         aggregated_table = create_events_aggregated_sink(t_env)
@@ -65,10 +72,9 @@ def log_aggregation():
         SELECT
             window_start,
             PULocationID,
-            COUNT(*) AS num_trips,
-            SUM(total_amount) AS total_revenue
+            COUNT(*) AS num_trips
         FROM TABLE(
-            TUMBLE(TABLE {source_table}, DESCRIPTOR(event_timestamp), INTERVAL '1' HOUR)
+            TUMBLE(TABLE {source_table}, DESCRIPTOR(event_timestamp), INTERVAL '5' MINUTES)
         )
         GROUP BY window_start, PULocationID;
 
@@ -79,4 +85,4 @@ def log_aggregation():
 
 
 if __name__ == '__main__':
-    log_aggregation()
+    log_aggregation() 
