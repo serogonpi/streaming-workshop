@@ -184,6 +184,9 @@ Now we have the data in the Kafka stream. It's time to process it.
 * Use `lpep_dropoff_datetime` time as your watermark with a 5 second tolerance
 * Which pickup and drop off locations have the longest unbroken streak of taxi trips?
 
+pulocationid	dolocationid	max_streak
+129	129	11
+
 
 ## Submitting the solutions
 

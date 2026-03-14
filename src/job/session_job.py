@@ -18,10 +18,12 @@ def create_events_source_kafka(t_env):
         ) WITH (
             'connector' = 'kafka',
             'properties.bootstrap.servers' = 'redpanda:29092',
-            'topic' = 'green_trips',
+            'topic' = 'green-trips',
             'scan.startup.mode' = 'latest-offset',
             'properties.auto.offset.reset' = 'earliest',
-            'format' = 'json'
+            'format' = 'json',
+            'json.ignore-parse-errors' = 'true',
+            'scan.watermark.idle-timeout' = '10s'
         );
         """
     t_env.execute_sql(source_ddl)
@@ -33,11 +35,12 @@ def create_events_aggregated_sink(t_env):
     sink_ddl = f"""
         CREATE TABLE {table_name} (
             window_start TIMESTAMP(3),
+            window_end TIMESTAMP(3),
             PULocationID INT,
             DOLocationID INT,
             num_trips BIGINT,
             total_tip DOUBLE,
-            PRIMARY KEY (window_start, PULocationID, DOLocationID) NOT ENFORCED
+            PRIMARY KEY (window_start, window_end, PULocationID, DOLocationID) NOT ENFORCED
         ) WITH (
             'connector' = 'jdbc',
             'url' = 'jdbc:postgresql://postgres:5432/postgres',
@@ -54,7 +57,7 @@ def create_events_aggregated_sink(t_env):
 def log_aggregation():
     env = StreamExecutionEnvironment.get_execution_environment()
     env.enable_checkpointing(10 * 1000)
-    env.set_parallelism(3)
+    env.set_parallelism(1)
 
     settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
     t_env = StreamTableEnvironment.create(env, environment_settings=settings)
@@ -67,6 +70,7 @@ def log_aggregation():
         INSERT INTO {aggregated_table}
         SELECT
             window_start,
+            window_end,
             PULocationID,
             DOLocationID,
             COUNT(*) AS num_trips,
@@ -74,7 +78,7 @@ def log_aggregation():
         FROM TABLE(
             SESSION(TABLE {source_table}, DESCRIPTOR(event_timestamp), INTERVAL '5' MINUTE)
         )
-        GROUP BY window_start, PULocationID, DOLocationID;
+        GROUP BY window_start, window_end, PULocationID, DOLocationID;
 
         """).wait()
 
